@@ -33,6 +33,9 @@ func main() {
 	faasd.POST("/build", api.WarpHandle(faasCliHandler.Build))
 	faasd.POST("/push", api.WarpHandle(faasCliHandler.Push))
 	faasd.POST("/deploy", api.WarpHandle(faasCliHandler.Deploy))
-	faasd.GET("/list", api.WarpHandle(faasCliHandler.GetInvokeInfo))
+	faasd.GET("/list", api.WarpHandle(faasCliHandler.GetAllInvokeInfo))
+	faasd.GET("/describe", api.WarpHandle(faasCliHandler.GetInvokeInfo))
+	faasd.POST("/up", api.WarpHandle(faasCliHandler.Up))
+	faasd.GET("/support", api.WarpHandle(faasCliHandler.SupportedLang))
 	app.Run(":8080")
 }
