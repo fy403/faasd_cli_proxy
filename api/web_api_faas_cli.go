@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -20,6 +19,7 @@ type Data struct {
 var langs = []string{
 	"go",
 	"golang-middleware",
+	"golang-http",
 	"node",
 	"python",
 	"python3",
@@ -33,9 +33,9 @@ func (*FassCliHandler) SupportedLang(wait *WaitConn) {
 }
 
 func (*FassCliHandler) New(wait *WaitConn, req struct {
-	lang   string `json:"lang" validate:"required"`
-	name   string `json:"name" validate:"required"`
-	prefix string `json:"prefix" validate:"required"`
+	Lang   string `json:"lang" validate:"required"`
+	Name   string `json:"name" validate:"required"`
+	Prefix string `json:"prefix" validate:"required"`
 }) {
 	defer func() { wait.Done() }()
 	if err := validate.Struct(&req); err != nil {
@@ -44,33 +44,32 @@ func (*FassCliHandler) New(wait *WaitConn, req struct {
 	}
 	// 移除同名文件，目录，避免数据干扰
 	{
-		rmCmd := exec.Command("rm", "-rf", req.name+"*")
-		rmCmd.Start()
+		rmCmd := exec.Command("rm", "-rf", "./"+req.Name+"*")
+		rmCmd.Run()
 	}
-	cmd := exec.Command("faas-cli", "new", "--lang", req.lang, req.name, "--prefix", req.prefix)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Run(); err != nil {
+
+	out, err := utils.ExecCommand("faas-cli", "new", "--lang", req.Lang, "--prefix", req.Prefix, req.Name)
+	if err != nil {
 		wait.SetResult(fmt.Sprintf("cmd exec failed: %s", err.Error()), "")
 		return
 	}
 
 	var filePathWithDep, filePathWithCtn string
-	switch req.lang {
-	case "go", "golang-middleware":
-		// 写入./req.name/go.mod
-		filePathWithDep = fmt.Sprintf("./%s/go.mod", req.name)
-		filePathWithCtn = fmt.Sprintf("./%s/handler.go", req.name)
+	switch req.Lang {
+	case "go", "golang-middleware", "golang-http":
+		// 写入./req.Name/go.mod
+		filePathWithDep = fmt.Sprintf("./%s/go.mod", req.Name)
+		filePathWithCtn = fmt.Sprintf("./%s/handler.go", req.Name)
 	case "python", "python3":
-		// 写入./req.name/requirements.txt
-		filePathWithDep = fmt.Sprintf("./%s/requirements.txt", req.name)
-		filePathWithCtn = fmt.Sprintf("./%s/handler.py", req.name)
+		// 写入./req.Name/requirements.txt
+		filePathWithDep = fmt.Sprintf("./%s/requirements.txt", req.Name)
+		filePathWithCtn = fmt.Sprintf("./%s/handler.py", req.Name)
 	case "node":
-		// 写入./req.name/package.json
-		filePathWithDep = fmt.Sprintf("./%s/package.json", req.name)
-		filePathWithCtn = fmt.Sprintf("./%s/handler.js", req.name)
+		// 写入./req.Name/package.json
+		filePathWithDep = fmt.Sprintf("./%s/package.json", req.Name)
+		filePathWithCtn = fmt.Sprintf("./%s/handler.js", req.Name)
 	default:
-		wait.SetResult("the lang: %s not supported", req.lang)
+		wait.SetResult("the lang: %s not supported", req.Lang)
 		return
 	}
 	dep, err := utils.ReadFile(filePathWithDep)
@@ -85,7 +84,7 @@ func (*FassCliHandler) New(wait *WaitConn, req struct {
 	}
 	// 返回模板数据
 	data := Data{
-		Output:       out.String(),
+		Output:       out,
 		Dependencies: dep,
 		Content:      cnt,
 	}
@@ -93,10 +92,10 @@ func (*FassCliHandler) New(wait *WaitConn, req struct {
 }
 
 func (*FassCliHandler) Write(wait *WaitConn, req struct {
-	name         string `json:"name" validate:"required"`
-	lang         string `json:"lang" validate:"required"`
-	content      []byte `json:"content"`
-	dependencies []byte `json:"dependencies"`
+	Name         string `json:"name" validate:"required"`
+	Lang         string `json:"lang" validate:"required"`
+	Content      []byte `json:"content"`
+	Dependencies []byte `json:"dependencies"`
 }) {
 	defer func() { wait.Done() }()
 	if err := validate.Struct(&req); err != nil {
@@ -105,30 +104,30 @@ func (*FassCliHandler) Write(wait *WaitConn, req struct {
 	}
 	// 按语言分别添加依赖
 	var filePathWithDep, filePathWithCtn string
-	switch req.lang {
+	switch req.Lang {
 	case "go", "golang-middleware":
-		// 写入./req.name/go.mod
-		filePathWithDep = fmt.Sprintf("./%s/go.mod", req.name)
-		filePathWithCtn = fmt.Sprintf("./%s/handler.go", req.name)
+		// 写入./req.Name/go.mod
+		filePathWithDep = fmt.Sprintf("./%s/go.mod", req.Name)
+		filePathWithCtn = fmt.Sprintf("./%s/handler.go", req.Name)
 	case "python", "python3":
-		// 写入./req.name/requirements.txt
-		filePathWithDep = fmt.Sprintf("./%s/requirements.txt", req.name)
-		filePathWithCtn = fmt.Sprintf("./%s/handler.py", req.name)
+		// 写入./req.Name/requirements.txt
+		filePathWithDep = fmt.Sprintf("./%s/requirements.txt", req.Name)
+		filePathWithCtn = fmt.Sprintf("./%s/handler.py", req.Name)
 	case "node":
-		// 写入./req.name/package.json
-		filePathWithDep = fmt.Sprintf("./%s/package.json", req.name)
-		filePathWithCtn = fmt.Sprintf("./%s/handler.js", req.name)
+		// 写入./req.Name/package.json
+		filePathWithDep = fmt.Sprintf("./%s/package.json", req.Name)
+		filePathWithCtn = fmt.Sprintf("./%s/handler.js", req.Name)
 	default:
-		wait.SetResult("the lang: %s not supported", req.lang)
+		wait.SetResult("the lang: %s not supported", req.Lang)
 		return
 	}
 	// 依赖写入
-	if err := utils.WriteFile(filePathWithDep, req.dependencies); err != nil {
+	if err := utils.WriteFile(filePathWithDep, req.Dependencies); err != nil {
 		wait.SetResult(fmt.Sprintf("Could not write content to the file: %s, err: %s", filePathWithDep, err.Error()), "")
 		return
 	}
 	// 代码写入
-	if err := utils.WriteFile(filePathWithCtn, req.content); err != nil {
+	if err := utils.WriteFile(filePathWithCtn, req.Content); err != nil {
 		wait.SetResult(fmt.Sprintf("Could not write content to the file: %s, err: %s", filePathWithCtn, err.Error()), "")
 		return
 	}
@@ -137,14 +136,14 @@ func (*FassCliHandler) Write(wait *WaitConn, req struct {
 
 // build & push & deploy
 func (*FassCliHandler) Up(wait *WaitConn, req struct {
-	name string `json:"name" validate:"required"`
+	Name string `json:"name" validate:"required"`
 }) {
 	defer func() { wait.Done() }()
 	if err := validate.Struct(&req); err != nil {
 		wait.SetResult(err.Error(), "")
 		return
 	}
-	out, err := utils.ExecCommand("faas-cli", "up", "-f", req.name+".yml")
+	out, err := utils.ExecCommand("faas-cli", "up", "-f", req.Name+".yml")
 	if err != nil {
 		wait.SetResult(fmt.Sprintf("cmd exec failed: %s", err.Error()), "")
 		return
@@ -153,7 +152,7 @@ func (*FassCliHandler) Up(wait *WaitConn, req struct {
 }
 
 func (*FassCliHandler) Build(wait *WaitConn, req struct {
-	name string `json:"name" validate:"required"`
+	Name string `json:"name" validate:"required"`
 }) {
 	defer func() { wait.Done() }()
 	if err := validate.Struct(&req); err != nil {
@@ -161,7 +160,7 @@ func (*FassCliHandler) Build(wait *WaitConn, req struct {
 		return
 	}
 
-	out, err := utils.ExecCommand("faas-cli", "build", "-f", req.name+".yml")
+	out, err := utils.ExecCommand("faas-cli", "build", "-f", req.Name+".yml")
 	if err != nil {
 		wait.SetResult(fmt.Sprintf("cmd exec failed: %s", err.Error()), "")
 		return
@@ -170,7 +169,7 @@ func (*FassCliHandler) Build(wait *WaitConn, req struct {
 }
 
 func (*FassCliHandler) Push(wait *WaitConn, req struct {
-	name string `json:"name" validate:"required"`
+	Name string `json:"name" validate:"required"`
 }) {
 	defer func() { wait.Done() }()
 	if err := validate.Struct(&req); err != nil {
@@ -178,7 +177,7 @@ func (*FassCliHandler) Push(wait *WaitConn, req struct {
 		return
 	}
 
-	out, err := utils.ExecCommand("faas-cli", "push", "-f", req.name+".yml")
+	out, err := utils.ExecCommand("faas-cli", "push", "-f", req.Name+".yml")
 	if err != nil {
 		wait.SetResult(fmt.Sprintf("cmd exec failed: %s", err.Error()), "")
 		return
@@ -187,7 +186,7 @@ func (*FassCliHandler) Push(wait *WaitConn, req struct {
 }
 
 func (*FassCliHandler) Deploy(wait *WaitConn, req struct {
-	name string `json:"name" validate:"required"`
+	Name string `json:"name" validate:"required"`
 }) {
 	defer func() { wait.Done() }()
 	if err := validate.Struct(&req); err != nil {
@@ -195,7 +194,7 @@ func (*FassCliHandler) Deploy(wait *WaitConn, req struct {
 		return
 	}
 
-	out, err := utils.ExecCommand("faas-cli", "deploy", "-f", req.name+".yml")
+	out, err := utils.ExecCommand("faas-cli", "deploy", "-f", req.Name+".yml")
 	if err != nil {
 		wait.SetResult(fmt.Sprintf("cmd exec failed: %s", err.Error()), "")
 		return
@@ -224,7 +223,7 @@ func (*FassCliHandler) GetAllInvokeInfo(wait *WaitConn) {
 }
 
 func (*FassCliHandler) GetInvokeInfo(wait *WaitConn, req struct {
-	name string `json:"name" validate:"required"`
+	Name string `json:"name" validate:"required"`
 }) {
 	defer func() { wait.Done() }()
 	if err := validate.Struct(&req); err != nil {
@@ -232,7 +231,7 @@ func (*FassCliHandler) GetInvokeInfo(wait *WaitConn, req struct {
 		return
 	}
 
-	out, err := utils.ExecCommand("faas-cli", "describe", req.name)
+	out, err := utils.ExecCommand("faas-cli", "describe", req.Name)
 	if err != nil {
 		wait.SetResult(fmt.Sprintf("cmd exec failed: %s", err.Error()), "")
 		return

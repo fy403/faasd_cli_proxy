@@ -1,11 +1,13 @@
 package utils
 
 import (
+	"log"
 	"os/exec"
 )
 
 func ExecCommand(cmd string, args ...string) (string, error) {
 	command := exec.Command(cmd, args...)
+	log.Printf("%s %v", cmd, args)
 	out, err := command.CombinedOutput()
 	if err != nil {
 		return "", err

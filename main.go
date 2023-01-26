@@ -28,14 +28,14 @@ func main() {
 	// URI: /api/faasd/acton
 	faasd := _api.Group("/faasd")
 	faasCliHandler := new(api.FassCliHandler)
+	faasd.GET("/list", api.WarpHandle(faasCliHandler.GetAllInvokeInfo))
+	faasd.GET("/support", api.WarpHandle(faasCliHandler.SupportedLang))
+	faasd.POST("/describe", api.WarpHandle(faasCliHandler.GetInvokeInfo))
 	faasd.POST("/new", api.WarpHandle(faasCliHandler.New))
 	faasd.POST("/write", api.WarpHandle(faasCliHandler.Write))
 	faasd.POST("/build", api.WarpHandle(faasCliHandler.Build))
 	faasd.POST("/push", api.WarpHandle(faasCliHandler.Push))
 	faasd.POST("/deploy", api.WarpHandle(faasCliHandler.Deploy))
-	faasd.GET("/list", api.WarpHandle(faasCliHandler.GetAllInvokeInfo))
-	faasd.GET("/describe", api.WarpHandle(faasCliHandler.GetInvokeInfo))
 	faasd.POST("/up", api.WarpHandle(faasCliHandler.Up))
-	faasd.GET("/support", api.WarpHandle(faasCliHandler.SupportedLang))
-	app.Run(":8080")
+	app.Run(":18080")
 }
