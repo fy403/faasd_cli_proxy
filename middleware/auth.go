@@ -52,7 +52,7 @@ func CookieAuthForRealm(accounts Accounts) gin.HandlerFunc {
 		var user string
 		if strings.Contains(c.Request.URL.Path, "logout") {
 			c.SetCookie("auth", "", -1, "/", c.GetHeader("Host"), false, true)
-			c.JSON(200, authResult{Code: 200, Message: "ok"})
+			c.JSON(200, authResult{Code: 200, Message: ""})
 			return
 		}
 		// Search user in the slice of allowed credentials
@@ -69,6 +69,11 @@ func CookieAuthForRealm(accounts Accounts) gin.HandlerFunc {
 			}
 			return
 		}
+		if !strings.Contains(c.Request.URL.Path, "login") && !strings.Contains(c.Request.URL.Path, "logout") {
+			c.JSON(401, authResult{Code: 401, Message: "not login"})
+			c.Abort()
+			return
+		}
 		name := c.Query("name")
 		password := c.Query("password")
 		if name == "" || password == "" {
@@ -82,7 +87,7 @@ func CookieAuthForRealm(accounts Accounts) gin.HandlerFunc {
 			c.SetCookie("auth", encryption, 86400, "/", c.GetHeader("Host"), false, false)
 			c.Set(AuthUserKey, user)
 			if strings.Contains(c.Request.URL.Path, "login") {
-				c.JSON(200, authResult{Code: 200, Message: "ok", Data: encryption})
+				c.JSON(200, authResult{Code: 200, Message: "", Data: encryption})
 			}
 			return
 		} else {

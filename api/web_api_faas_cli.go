@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -9,12 +10,6 @@ import (
 )
 
 type FassCliHandler struct{}
-
-type Data struct {
-	Output       string `json:"output"`
-	Dependencies string `json:"dependencies"`
-	Content      string `json:"content"`
-}
 
 var langs = []string{
 	"go",
@@ -83,7 +78,11 @@ func (*FassCliHandler) New(wait *WaitConn, req struct {
 		return
 	}
 	// 返回模板数据
-	data := Data{
+	data := struct {
+		Output       string `json:"output"`
+		Dependencies []byte `json:"dependencies"`
+		Content      []byte `json:"content"`
+	}{
 		Output:       out,
 		Dependencies: dep,
 		Content:      cnt,
@@ -94,18 +93,28 @@ func (*FassCliHandler) New(wait *WaitConn, req struct {
 func (*FassCliHandler) Write(wait *WaitConn, req struct {
 	Name         string `json:"name" validate:"required"`
 	Lang         string `json:"lang" validate:"required"`
-	Content      []byte `json:"content"`
-	Dependencies []byte `json:"dependencies"`
+	Content      string `json:"content" validate:"required"`
+	Dependencies string `json:"dependencies" validate:"required"`
 }) {
 	defer func() { wait.Done() }()
 	if err := validate.Struct(&req); err != nil {
 		wait.SetResult(err.Error(), "")
 		return
 	}
+	cnt, err := base64.StdEncoding.DecodeString(req.Content)
+	if err != nil {
+		wait.SetResult(err.Error(), "")
+		return
+	}
+	dep, err := base64.StdEncoding.DecodeString(req.Dependencies)
+	if err != nil {
+		wait.SetResult(err.Error(), "")
+		return
+	}
 	// 按语言分别添加依赖
 	var filePathWithDep, filePathWithCtn string
 	switch req.Lang {
-	case "go", "golang-middleware":
+	case "go", "golang-middleware", "golang-http":
 		// 写入./req.Name/go.mod
 		filePathWithDep = fmt.Sprintf("./%s/go.mod", req.Name)
 		filePathWithCtn = fmt.Sprintf("./%s/handler.go", req.Name)
@@ -122,14 +131,24 @@ func (*FassCliHandler) Write(wait *WaitConn, req struct {
 		return
 	}
 	// 依赖写入
-	if err := utils.WriteFile(filePathWithDep, req.Dependencies); err != nil {
+	if err := utils.WriteFile(filePathWithDep, dep); err != nil {
 		wait.SetResult(fmt.Sprintf("Could not write content to the file: %s, err: %s", filePathWithDep, err.Error()), "")
 		return
 	}
 	// 代码写入
-	if err := utils.WriteFile(filePathWithCtn, req.Content); err != nil {
+	if err := utils.WriteFile(filePathWithCtn, cnt); err != nil {
 		wait.SetResult(fmt.Sprintf("Could not write content to the file: %s, err: %s", filePathWithCtn, err.Error()), "")
 		return
+	}
+	// 额外执行
+	switch req.Lang {
+	case "go", "golang-middleware", "golang-http":
+		cmd_fmt := exec.Command("cd", req.Name, ";", "go", "fmt")         // 格式化代码
+		cmd_mod := exec.Command("cd", req.Name, ";", "go", "mod", "tidy") // 修改go.mod
+		cmd_fmt.Run()
+		cmd_mod.Run()
+	case "node":
+	default:
 	}
 	wait.SetResult("", "")
 }
@@ -143,12 +162,17 @@ func (*FassCliHandler) Up(wait *WaitConn, req struct {
 		wait.SetResult(err.Error(), "")
 		return
 	}
-	out, err := utils.ExecCommand("faas-cli", "up", "-f", req.Name+".yml")
+	out, err := utils.ExecCommand("faas-cli", "up", "--parallel", "4", "-f", req.Name+".yml")
 	if err != nil {
 		wait.SetResult(fmt.Sprintf("cmd exec failed: %s", err.Error()), "")
 		return
 	}
-	wait.SetResult("", out)
+	data := struct {
+		Output string `json:"output"`
+	}{
+		Output: out,
+	}
+	wait.SetResult("", data)
 }
 
 func (*FassCliHandler) Build(wait *WaitConn, req struct {
@@ -160,12 +184,17 @@ func (*FassCliHandler) Build(wait *WaitConn, req struct {
 		return
 	}
 
-	out, err := utils.ExecCommand("faas-cli", "build", "-f", req.Name+".yml")
+	out, err := utils.ExecCommand("faas-cli", "build", "--parallel", "4", "-f", req.Name+".yml")
 	if err != nil {
 		wait.SetResult(fmt.Sprintf("cmd exec failed: %s", err.Error()), "")
 		return
 	}
-	wait.SetResult("", out)
+	data := struct {
+		Output string `json:"output"`
+	}{
+		Output: out,
+	}
+	wait.SetResult("", data)
 }
 
 func (*FassCliHandler) Push(wait *WaitConn, req struct {
@@ -182,7 +211,12 @@ func (*FassCliHandler) Push(wait *WaitConn, req struct {
 		wait.SetResult(fmt.Sprintf("cmd exec failed: %s", err.Error()), "")
 		return
 	}
-	wait.SetResult("", out)
+	data := struct {
+		Output string `json:"output"`
+	}{
+		Output: out,
+	}
+	wait.SetResult("", data)
 }
 
 func (*FassCliHandler) Deploy(wait *WaitConn, req struct {
@@ -199,7 +233,34 @@ func (*FassCliHandler) Deploy(wait *WaitConn, req struct {
 		wait.SetResult(fmt.Sprintf("cmd exec failed: %s", err.Error()), "")
 		return
 	}
-	wait.SetResult("", out)
+	data := struct {
+		Output string `json:"output"`
+	}{
+		Output: out,
+	}
+	wait.SetResult("", data)
+}
+
+func (*FassCliHandler) Delete(wait *WaitConn, req struct {
+	Name string `json:"name" validate:"required"`
+}) {
+	defer func() { wait.Done() }()
+	if err := validate.Struct(&req); err != nil {
+		wait.SetResult(err.Error(), "")
+		return
+	}
+
+	out, err := utils.ExecCommand("faas-cli", "remove", "-f", req.Name+".yml")
+	if err != nil {
+		wait.SetResult(fmt.Sprintf("cmd exec failed: %s", err.Error()), "")
+		return
+	}
+	data := struct {
+		Output string `json:"output"`
+	}{
+		Output: out,
+	}
+	wait.SetResult("", data)
 }
 
 func (*FassCliHandler) GetAllInvokeInfo(wait *WaitConn) {
@@ -219,7 +280,12 @@ func (*FassCliHandler) GetAllInvokeInfo(wait *WaitConn) {
 		}
 		describes = append(describes, out)
 	}
-	wait.SetResult("", describes)
+	data := struct {
+		Describe []string `json:"describes"`
+	}{
+		Describe: describes,
+	}
+	wait.SetResult("", data)
 }
 
 func (*FassCliHandler) GetInvokeInfo(wait *WaitConn, req struct {
@@ -236,5 +302,10 @@ func (*FassCliHandler) GetInvokeInfo(wait *WaitConn, req struct {
 		wait.SetResult(fmt.Sprintf("cmd exec failed: %s", err.Error()), "")
 		return
 	}
-	wait.SetResult("", out)
+	data := struct {
+		Output string `json:"output"`
+	}{
+		Output: out,
+	}
+	wait.SetResult("", data)
 }

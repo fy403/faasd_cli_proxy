@@ -1,1 +1,6 @@
 .vscode
+/template
+template
+build
+.secrets
+*-*

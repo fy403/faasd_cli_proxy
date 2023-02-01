@@ -17,7 +17,7 @@ func main() {
 
 	_api := app.Group("/api")
 	_api.Use(auth)
-	// 设置路由
+	// 设置空路由
 	// /api/action
 	_api.GET("/login", func(c *gin.Context) {})
 	_api.GET("/logout", func(c *gin.Context) {})
@@ -37,5 +37,6 @@ func main() {
 	faasd.POST("/push", api.WarpHandle(faasCliHandler.Push))
 	faasd.POST("/deploy", api.WarpHandle(faasCliHandler.Deploy))
 	faasd.POST("/up", api.WarpHandle(faasCliHandler.Up))
+	faasd.POST("/delete", api.WarpHandle(faasCliHandler.Delete))
 	app.Run(":18080")
 }
